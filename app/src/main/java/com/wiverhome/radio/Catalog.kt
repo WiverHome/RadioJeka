@@ -6,6 +6,12 @@ enum class Region(val title: String, val countryCode: String?) {
     WORLD("Весь мир", null),
 }
 
+enum class ThemeMode(val title: String) {
+    SYSTEM("Как в системе"),
+    LIGHT("Светлая"),
+    DARK("Тёмная"),
+}
+
 /** Genre chip; stations matching any of the Radio Browser [tags] belong to it. */
 data class Genre(val title: String, val tags: List<String>)
 

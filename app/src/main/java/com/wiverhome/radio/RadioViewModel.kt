@@ -57,6 +57,10 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         Region.entries.firstOrNull { it.name == prefs.getString(KEY_REGION, null) } ?: Region.RUSSIA,
     )
     val region: StateFlow<Region> = _region.asStateFlow()
+    private val _theme = MutableStateFlow(
+        ThemeMode.entries.firstOrNull { it.name == prefs.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
+    )
+    val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
     private val _genre = MutableStateFlow<Genre?>(null)
     val genre: StateFlow<Genre?> = _genre.asStateFlow()
     private val reload = MutableStateFlow(0)
@@ -133,6 +137,11 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     fun selectRegion(region: Region) {
         _region.value = region
         prefs.edit().putString(KEY_REGION, region.name).apply()
+    }
+
+    fun selectTheme(mode: ThemeMode) {
+        _theme.value = mode
+        prefs.edit().putString(KEY_THEME, mode.name).apply()
     }
 
     /** Tapping the selected genre again clears it. */
@@ -237,6 +246,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val EXTRA_STATION = "station"
         const val KEY_REGION = "region"
+        const val KEY_THEME = "theme"
         const val MAX_QUEUE = 100
     }
 }

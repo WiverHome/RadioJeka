@@ -3,6 +3,7 @@ package com.wiverhome.radio
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -34,10 +35,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
@@ -47,6 +52,8 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -70,6 +77,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,34 +102,57 @@ import coil.compose.AsyncImage
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
-            RadioTheme { RadioScreen() }
+            val vm: RadioViewModel = viewModel()
+            val theme by vm.theme.collectAsStateWithLifecycle()
+            val dark = when (theme) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            // Status/navigation bar icons follow the chosen theme, not the system one.
+            DisposableEffect(dark) {
+                val style = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { dark }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose {}
+            }
+            RadioTheme(dark) { RadioScreen(vm) }
         }
     }
 }
 
 @Composable
-private fun RadioTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+private fun RadioTheme(dark: Boolean, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val colors = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> darkColorScheme()
-        else -> lightColorScheme()
+        // Before Material You: brand colors from the launcher icon gradient.
+        dark -> darkColorScheme(
+            primary = Color(0xFFFFB2BE),
+            onPrimary = Color(0xFF5F1027),
+            primaryContainer = Color(0xFF7E2A3E),
+            secondaryContainer = Color(0xFF5C3B42),
+        )
+        else -> lightColorScheme(
+            primary = Color(0xFFC8294F),
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFFFFD9DE),
+            secondaryContainer = Color(0xFFFFE3E6),
+        )
     }
     MaterialTheme(colorScheme = colors, content = content)
 }
 
 @Composable
-private fun RadioScreen(vm: RadioViewModel = viewModel()) {
+private fun RadioScreen(vm: RadioViewModel) {
     val query by vm.query.collectAsStateWithLifecycle()
     val list by vm.list.collectAsStateWithLifecycle()
     val favorites by vm.favorites.items.collectAsStateWithLifecycle()
     val player by vm.player.collectAsStateWithLifecycle()
     val region by vm.region.collectAsStateWithLifecycle()
     val genre by vm.genre.collectAsStateWithLifecycle()
+    val theme by vm.theme.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
     val favoriteIds = favorites.mapTo(HashSet()) { it.id }
     var showPlayer by rememberSaveable { mutableStateOf(false) }
@@ -146,26 +177,30 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
             // Opaque, otherwise the list scrolls visibly underneath the search and filters.
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.statusBarsPadding().padding(bottom = 4.dp)) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { vm.query.value = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        placeholder = { Text("Поиск радиостанций") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { vm.query.value = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Очистить")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { vm.query.value = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                            placeholder = { Text("Поиск радиостанций") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = { vm.query.value = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                    }
                                 }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(28.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-                    )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(28.dp),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                        )
+                        ThemeButton(theme, onSelect = vm::selectTheme)
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Filters(region, genre, onRegion = vm::selectRegion, onGenre = vm::selectGenre)
                 }
             }
@@ -236,6 +271,38 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
             onNext = vm::next,
             onDismiss = { showPlayer = false },
         )
+    }
+}
+
+@Composable
+private fun ThemeButton(current: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    fun icon(mode: ThemeMode) = when (mode) {
+        ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+        ThemeMode.LIGHT -> Icons.Default.LightMode
+        ThemeMode.DARK -> Icons.Default.DarkMode
+    }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(icon(current), contentDescription = "Тема: ${current.title}")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ThemeMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.title) },
+                    leadingIcon = { Icon(icon(mode), contentDescription = null) },
+                    trailingIcon = if (mode == current) {
+                        { Icon(Icons.Default.Check, contentDescription = "Выбрана") }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        open = false
+                        onSelect(mode)
+                    },
+                )
+            }
+        }
     }
 }
 
