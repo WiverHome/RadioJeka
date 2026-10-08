@@ -40,6 +40,8 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        // Next/previous station wraps around the queue.
+        player.repeatMode = Player.REPEAT_MODE_ALL
         player.addListener(StreamListener(player))
 
         val openApp = PendingIntent.getActivity(

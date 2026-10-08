@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -42,11 +43,14 @@ data class PlayerState(
     val buffering: Boolean = false,
     val track: String? = null,
     val error: Boolean = false,
+    /** More than one station queued, so next/previous make sense. */
+    val hasQueue: Boolean = false,
 )
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class RadioViewModel(app: Application) : AndroidViewModel(app) {
     val favorites = FavoritesStore(app)
+    private val catalog = StationCatalog(app)
     val query = MutableStateFlow("")
     private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val _region = MutableStateFlow(
@@ -65,15 +69,28 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     ) { q, region, genre, _ -> Triple(q, region, genre) }
         .flatMapLatest { (q, region, genre) ->
             flow {
-                emit(ListState.Loading)
-                val result = try {
-                    ListState.Ready(RadioApi.stations(q, region.countryCode, genre?.tags.orEmpty()))
+                val tags = genre?.tags.orEmpty()
+                val local = try {
+                    catalog.query(q, region.countryCode, tags)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    ListState.Failed
+                    emit(ListState.Failed)
+                    return@flow
                 }
-                emit(result)
+                emit(ListState.Ready(local))
+                // The built-in catalog has every Russian station but only the world's most popular,
+                // so name searches also ask the online catalog when it's reachable.
+                if (q.isEmpty()) return@flow
+                val online = try {
+                    RadioApi.stations(q, region.countryCode, tags)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@flow
+                }
+                val merged = (local + online).distinctBy { it.url }.sortedByDescending { it.clicks }
+                if (merged.size > local.size) emit(ListState.Ready(merged))
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ListState.Loading)
@@ -92,6 +109,9 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        viewModelScope.launch {
+            if (catalog.refreshIfStale()) reload.value++
+        }
         viewModelScope.launch {
             try {
                 val c = controllerFuture.await()
@@ -122,29 +142,58 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleFavorite(station: Station) = favorites.toggle(station)
 
-    fun play(station: Station) {
+    /** Plays [station]; [queue] (the list it was picked from) feeds next/previous, also in the notification. */
+    fun play(station: Station, queue: List<Station>) {
         val c = controller ?: return
+        val stations = queue.take(MAX_QUEUE).takeIf { q -> q.any { it.id == station.id } } ?: listOf(station)
+        val index = stations.indexOfFirst { it.id == station.id }
         if (current?.id == station.id) {
+            adoptQueue(c, stations, index)
             toggle()
             return
         }
         current = station
+        _player.value = PlayerState(station = station, playWhenReady = true, buffering = true, hasQueue = stations.size > 1)
+        c.setMediaItems(stations.map(::mediaItem), index, C.TIME_UNSET)
+        c.prepare()
+        c.play()
+    }
+
+    /** Swaps the stations around the current one for [stations] without interrupting playback. */
+    private fun adoptQueue(c: MediaController, stations: List<Station>, index: Int) {
+        val queued = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }
+        if (queued == stations.map { it.id }) return
+        val currentIndex = c.currentMediaItemIndex
+        c.removeMediaItems(currentIndex + 1, c.mediaItemCount)
+        c.removeMediaItems(0, currentIndex)
+        c.addMediaItems(0, stations.subList(0, index).map(::mediaItem))
+        c.addMediaItems(stations.subList(index + 1, stations.size).map(::mediaItem))
+    }
+
+    fun next() = skip { it.seekToNextMediaItem() }
+
+    fun previous() = skip { it.seekToPreviousMediaItem() }
+
+    private fun skip(seek: (MediaController) -> Unit) {
+        val c = controller ?: return
+        seek(c)
+        if (c.playbackState == Player.STATE_IDLE) c.prepare()
+        c.play()
+    }
+
+    private fun mediaItem(station: Station): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(station.name)
             .setStation(station.name)
             .setArtworkUri(station.favicon.takeIf { it.isNotBlank() }?.let(Uri::parse))
             .setExtras(Bundle().apply { putString(EXTRA_STATION, station.toJson().toString()) })
             .build()
-        val item = MediaItem.Builder()
+        return MediaItem.Builder()
             .setMediaId(station.id)
             .setUri(station.url)
             .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(Uri.parse(station.url)).build())
             .setMediaMetadata(metadata)
             .build()
-        _player.value = PlayerState(station = station, playWhenReady = true, buffering = true)
-        c.setMediaItem(item)
-        c.prepare()
-        c.play()
     }
 
     fun toggle() {
@@ -176,6 +225,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
             buffering = p.playWhenReady && p.playbackState == Player.STATE_BUFFERING,
             track = p.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() && it != station?.name },
             error = p.playerError != null,
+            hasQueue = p.mediaItemCount > 1,
         )
     }
 
@@ -187,5 +237,6 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val EXTRA_STATION = "station"
         const val KEY_REGION = "region"
+        const val MAX_QUEUE = 100
     }
 }

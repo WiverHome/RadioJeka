@@ -11,13 +11,14 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -27,9 +28,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -40,16 +43,20 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -61,10 +68,12 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +83,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -114,9 +124,11 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
     val genre by vm.genre.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
     val favoriteIds = favorites.mapTo(HashSet()) { it.id }
+    var showPlayer by rememberSaveable { mutableStateOf(false) }
 
+    /** [queue] is the list the station was picked from: next/previous walk through it. */
     @Composable
-    fun StationItem(station: Station) = StationRow(
+    fun StationItem(station: Station, queue: List<Station>) = StationRow(
         station = station,
         details = station.details(hideCountryCode = region.countryCode),
         isFavorite = station.id in favoriteIds,
@@ -124,39 +136,44 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
         isPlaying = station.id == player.station?.id && player.playWhenReady && !player.error,
         onClick = {
             focus.clearFocus()
-            vm.play(station)
+            vm.play(station, queue)
         },
         onFavorite = { vm.toggleFavorite(station) },
     )
 
     Scaffold(
         topBar = {
-            Column(Modifier.statusBarsPadding()) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { vm.query.value = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("Поиск радиостанций") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { vm.query.value = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+            // Opaque, otherwise the list scrolls visibly underneath the search and filters.
+            Surface(color = MaterialTheme.colorScheme.surface) {
+                Column(Modifier.statusBarsPadding().padding(bottom = 4.dp)) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { vm.query.value = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        placeholder = { Text("Поиск радиостанций") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { vm.query.value = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                }
                             }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-                )
-                Filters(region, genre, onRegion = vm::selectRegion, onGenre = vm::selectGenre)
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(28.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                    )
+                    Filters(region, genre, onRegion = vm::selectRegion, onGenre = vm::selectGenre)
+                }
             }
         },
         bottomBar = {
-            if (player.station != null) MiniPlayer(player, onToggle = vm::toggle)
+            if (player.station != null) {
+                MiniPlayer(player, onOpen = { showPlayer = true }, onToggle = vm::toggle)
+            }
         },
     ) { padding ->
         LazyColumn(
@@ -166,7 +183,7 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
             val searching = query.isNotBlank()
             if (!searching && genre == null && favorites.isNotEmpty()) {
                 item { SectionHeader("Избранное") }
-                items(favorites, key = { "fav-" + it.id }) { StationItem(it) }
+                items(favorites, key = { "fav-" + it.id }) { StationItem(it, favorites) }
             }
             val header = when {
                 searching -> "Результаты"
@@ -202,10 +219,23 @@ private fun RadioScreen(vm: RadioViewModel = viewModel()) {
                         )
                     }
                 } else {
-                    items(state.stations, key = { "list-" + it.id }) { StationItem(it) }
+                    items(state.stations, key = { "list-" + it.id }) { StationItem(it, state.stations) }
                 }
             }
         }
+    }
+
+    val current = player.station
+    if (showPlayer && current != null) {
+        FullPlayer(
+            state = player,
+            isFavorite = current.id in favoriteIds,
+            onFavorite = { vm.toggleFavorite(current) },
+            onToggle = vm::toggle,
+            onPrevious = vm::previous,
+            onNext = vm::next,
+            onDismiss = { showPlayer = false },
+        )
     }
 }
 
@@ -305,12 +335,12 @@ private fun StationRow(
 }
 
 @Composable
-private fun StationLogo(url: String, size: Dp) {
+private fun StationLogo(url: String, size: Dp, corner: Dp = 12.dp) {
     var loaded by remember(url) { mutableStateOf(false) }
     Box(
         Modifier
             .size(size)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(corner))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
@@ -324,32 +354,54 @@ private fun StationLogo(url: String, size: Dp) {
             )
         }
         if (!loaded) {
-            Icon(Icons.Default.Radio, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Default.Radio,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(size * 0.45f),
+            )
         }
+    }
+}
+
+private fun PlayerState.status(): String = when {
+    error -> "Станция недоступна, нажмите ▶, чтобы повторить"
+    buffering -> "Подключение…"
+    !playWhenReady -> "Пауза"
+    else -> track ?: "В эфире"
+}
+
+/** Play / pause / spinner / retry icon for the main player button. */
+@Composable
+private fun PlayButtonContent(state: PlayerState, iconSize: Dp) {
+    val icon = Modifier.size(iconSize)
+    when {
+        state.error -> Icon(Icons.Default.Refresh, contentDescription = "Повторить", modifier = icon)
+        state.buffering -> CircularProgressIndicator(
+            modifier = Modifier.size(iconSize * 0.75f),
+            strokeWidth = 2.5.dp,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+        state.playWhenReady -> Icon(Icons.Default.Pause, contentDescription = "Пауза", modifier = icon)
+        else -> Icon(Icons.Default.PlayArrow, contentDescription = "Играть", modifier = icon)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MiniPlayer(state: PlayerState, onToggle: () -> Unit) {
+private fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit) {
     val station = state.station ?: return
-    val status = when {
-        state.error -> "Станция недоступна, нажмите, чтобы повторить"
-        state.buffering -> "Подключение…"
-        !state.playWhenReady -> "Пауза"
-        else -> state.track ?: "В эфире"
-    }
     Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle)
+                .clickable(onClick = onOpen)
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StationLogo(station.favicon, 52.dp)
-            Spacer(Modifier.width(14.dp))
+            StationLogo(station.favicon, 48.dp)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     station.name,
@@ -358,25 +410,97 @@ private fun MiniPlayer(state: PlayerState, onToggle: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    status,
+                    state.status(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (state.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     modifier = Modifier.basicMarquee(),
                 )
             }
-            Spacer(Modifier.width(12.dp))
-            FilledIconButton(onClick = onToggle, modifier = Modifier.size(56.dp)) {
-                when {
-                    state.error -> Icon(Icons.Default.Refresh, contentDescription = "Повторить")
-                    state.buffering -> CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.5.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    state.playWhenReady -> Icon(Icons.Default.Pause, contentDescription = "Пауза")
-                    else -> Icon(Icons.Default.PlayArrow, contentDescription = "Играть")
+            Spacer(Modifier.width(8.dp))
+            FilledIconButton(onClick = onToggle, modifier = Modifier.size(52.dp)) {
+                PlayButtonContent(state, 28.dp)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun FullPlayer(
+    state: PlayerState,
+    isFavorite: Boolean,
+    onFavorite: () -> Unit,
+    onToggle: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val station = state.station ?: return
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            StationLogo(station.favicon, 240.dp, corner = 28.dp)
+            Spacer(Modifier.height(28.dp))
+            Text(
+                station.name,
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                state.status(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (state.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(),
+            )
+            station.details(hideCountryCode = null).takeIf { it.isNotEmpty() }?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(32.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                IconButton(onClick = onPrevious, enabled = state.hasQueue, modifier = Modifier.size(64.dp)) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Предыдущая станция", modifier = Modifier.size(40.dp))
                 }
+                FilledIconButton(onClick = onToggle, modifier = Modifier.size(84.dp)) {
+                    PlayButtonContent(state, 44.dp)
+                }
+                IconButton(onClick = onNext, enabled = state.hasQueue, modifier = Modifier.size(64.dp)) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Следующая станция", modifier = Modifier.size(40.dp))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            FilledTonalButton(onClick = onFavorite) {
+                Icon(
+                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(if (isFavorite) "В избранном" else "В избранное")
             }
         }
     }

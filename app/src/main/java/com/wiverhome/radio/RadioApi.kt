@@ -4,7 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import org.json.JSONArray
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -19,6 +19,7 @@ object RadioApi {
         "all.api.radio-browser.info",
     )
     private const val LIMIT = 80
+    private const val SNAPSHOT_WORLD_TOP = 4000
 
     @Volatile
     private var preferredHost = 0
@@ -44,16 +45,25 @@ object RadioApi {
         }
     }
 
-    private suspend fun search(filters: List<String>): List<Station> = withContext(Dispatchers.IO) {
-        val params = filters + listOf("hidebroken=true", "order=clickcount", "reverse=true", "limit=$LIMIT")
+    /** Same content as tools/update_catalog.py: every Russian station plus the world's most popular. */
+    suspend fun snapshot(): List<Station> = coroutineScope {
+        val russia = async { search(listOf("countrycode=RU"), limit = 100_000) }
+        val world = async { search(emptyList(), limit = SNAPSHOT_WORLD_TOP) }
+        (russia.await() + world.await()).distinctBy { it.url }
+    }
+
+    private suspend fun search(filters: List<String>, limit: Int = LIMIT): List<Station> = runInterruptible(Dispatchers.IO) {
+        val params = filters + listOf("hidebroken=true", "order=clickcount", "reverse=true", "limit=$limit")
         val path = "/json/stations/search?" + params.joinToString("&")
         var lastError: Exception? = null
         for (i in hosts.indices) {
+            // Cancelled while blocked on the network: don't try the next mirror.
+            if (Thread.currentThread().isInterrupted) throw CancellationException("Search cancelled")
             val index = (preferredHost + i) % hosts.size
             try {
                 val stations = parse(get("https://${hosts[index]}$path"))
                 preferredHost = index
-                return@withContext stations
+                return@runInterruptible stations
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -73,8 +83,8 @@ object RadioApi {
     private fun get(url: String): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
-            conn.connectTimeout = 8000
-            conn.readTimeout = 10000
+            conn.connectTimeout = 6000
+            conn.readTimeout = 20000
             conn.setRequestProperty("User-Agent", "RadioJeka/1.0")
             if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")
             return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
