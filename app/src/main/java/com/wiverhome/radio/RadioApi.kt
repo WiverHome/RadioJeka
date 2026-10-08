@@ -75,7 +75,7 @@ object RadioApi {
         try {
             conn.connectTimeout = 8000
             conn.readTimeout = 10000
-            conn.setRequestProperty("User-Agent", "WiverRadio/1.0")
+            conn.setRequestProperty("User-Agent", "RadioJeka/1.0")
             if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")
             return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
