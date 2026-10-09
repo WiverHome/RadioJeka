@@ -12,6 +12,8 @@
 <p align="center">
   <a href="https://github.com/WiverHome/RadioJeka/releases/latest/download/RadioJeka.apk"><b>⬇ Скачать APK</b></a>
   &nbsp;·&nbsp;
+  <a href="https://wiverhome.github.io/RadioJeka/">Сайт</a>
+  &nbsp;·&nbsp;
   <a href="#установка">Как установить</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/WiverHome/RadioJeka/releases">Все версии</a>

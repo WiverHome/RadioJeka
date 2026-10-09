@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadioJeka — интернет-радио для Android</title>
+<meta name="description" content="Простое интернет-радио для Android: тысячи станций России и мира, категории, избранное, фоновое воспроизведение. Без рекламы и регистрации, работает без VPN.">
+<meta name="theme-color" content="#F2385A">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="RadioJeka — интернет-радио для Android">
+<meta property="og:description" content="Тысячи станций России и мира. Без рекламы, без регистрации, работает без VPN.">
+<meta property="og:image" content="https://wiverhome.github.io/RadioJeka/screenshots/light-list.png">
+<meta property="og:url" content="https://wiverhome.github.io/RadioJeka/">
+<style>
+:root {
+  --bg: #fbf8f6;
+  --bg-alt: #f3eeeb;
+  --surface: #ffffff;
+  --text: #1d1a1f;
+  --muted: #5e5862;
+  --line: #e6dfdc;
+  --accent: #F2385A;
+  --accent-2: #FF8A3D;
+  --accent-3: #A31C7A;
+  --accent-ink: #c41e45;
+  --grad: linear-gradient(135deg, #FF8A3D 0%, #F2385A 55%, #A31C7A 100%);
+  --shadow: 0 20px 50px -20px rgba(80, 20, 50, .35);
+  --radius: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131116;
+    --bg-alt: #1a171e;
+    --surface: #221e27;
+    --text: #f3eef2;
+    --muted: #a99fac;
+    --line: #332d38;
+    --accent-ink: #ff6f8a;
+    --shadow: 0 20px 50px -20px rgba(0, 0, 0, .7);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131116;
+  --bg-alt: #1a171e;
+  --surface: #221e27;
+  --text: #f3eef2;
+  --muted: #a99fac;
+  --line: #332d38;
+  --accent-ink: #ff6f8a;
+  --shadow: 0 20px 50px -20px rgba(0, 0, 0, .7);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent-ink); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+/* language: show only the active one */
+html[lang="ru"] [lang="en"], html[lang="en"] [lang="ru"] { display: none !important; }
+
+/* header */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; align-items: center; gap: 16px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; color: var(--text); text-decoration: none; }
+.brand img { width: 34px; height: 34px; }
+.nav { display: flex; gap: 22px; margin-left: auto; }
+.nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
+.nav a:hover { color: var(--text); }
+.lang {
+  display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden;
+}
+.lang button {
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  padding: 5px 11px; cursor: pointer;
+}
+.lang button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+/* buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 24px; border-radius: 999px; font-weight: 600; font-size: 16px;
+  text-decoration: none; transition: transform .15s, box-shadow .15s;
+}
+.btn:hover { transform: translateY(-2px); }
+.btn svg { width: 20px; height: 20px; flex: none; }
+.btn-primary { background: var(--grad); color: #fff; box-shadow: 0 12px 30px -10px rgba(242, 56, 90, .7); }
+.btn-ghost { border: 1.5px solid var(--line); color: var(--text); background: var(--surface); }
+
+/* hero */
+.hero { padding: 72px 0 40px; overflow: hidden; }
+.hero .wrap { display: grid; grid-template-columns: 1.05fr .95fr; gap: 40px; align-items: center; }
+.eyebrow {
+  display: inline-block; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-ink);
+}
+h1 { font-size: clamp(40px, 6vw, 66px); line-height: 1.05; letter-spacing: -1.5px; margin: 18px 0 18px; }
+h1 .grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: 20px; color: var(--muted); margin: 0 0 30px; max-width: 34em; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 28px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 15px; }
+.facts li::before { content: "✓"; color: var(--accent); font-weight: 700; margin-right: 7px; }
+
+.phones { position: relative; height: 600px; }
+.phones::before {
+  content: ""; position: absolute; inset: 8% 4% 4% 10%; border-radius: 50%;
+  background: var(--grad); filter: blur(70px); opacity: .35;
+}
+.phone {
+  position: absolute; width: 250px; border-radius: 34px; padding: 8px; background: #111;
+  box-shadow: var(--shadow);
+}
+.phone img { border-radius: 27px; }
+.phone.a { left: 6%; top: 40px; transform: rotate(-6deg); }
+.phone.b { right: 4%; top: 0; transform: rotate(5deg); }
+
+/* stats */
+.stats { padding: 20px 0 10px; }
+.stats .wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; text-align: center; }
+.stat b { display: block; font-size: 32px; line-height: 1.1; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.stat span { color: var(--muted); font-size: 15px; }
+
+/* sections */
+section { padding: 80px 0; }
+.alt { background: var(--bg-alt); }
+h2 { font-size: clamp(30px, 4vw, 42px); line-height: 1.15; letter-spacing: -.8px; margin: 0 0 14px; }
+.sub { color: var(--muted); font-size: 18px; margin: 0 0 44px; max-width: 40em; }
+
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px;
+}
+.card .ic {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center;
+  background: var(--grad); color: #fff; margin-bottom: 16px;
+}
+.card .ic svg { width: 24px; height: 24px; }
+.card h3 { margin: 0 0 6px; font-size: 19px; }
+.card p { margin: 0; color: var(--muted); font-size: 16px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+.chip { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 15px; }
+
+/* split blocks */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+.split.rev > :first-child { order: 2; }
+.split ul { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
+.split li { display: flex; gap: 12px; }
+.split li::before {
+  content: "✓"; flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--grad); color: #fff;
+}
+.shot { border-radius: 26px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+.shot.narrow { max-width: 300px; margin: 0 auto; }
+
+/* gallery */
+.toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 4px; background: var(--surface); margin-bottom: 34px; }
+.toggle button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 600; padding: 8px 18px; border-radius: 999px; cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--grad); color: #fff; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 28px; justify-content: center; }
+.gallery figure { margin: 0; text-align: center; }
+.gallery figcaption { color: var(--muted); font-size: 15px; margin-top: 12px; }
+.gallery img { border-radius: 26px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+
+/* steps */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: s; }
+.step { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px 26px 26px; }
+.step::before {
+  counter-increment: s; content: counter(s);
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--grad); color: #fff; font-weight: 700; margin-bottom: 14px;
+}
+.step h3 { margin: 0 0 6px; font-size: 19px; }
+.step p { margin: 0; color: var(--muted); font-size: 16px; }
+.note {
+  margin-top: 22px; padding: 18px 22px; border-radius: 16px; font-size: 16px; color: var(--muted);
+  border: 1px dashed var(--line); background: var(--surface);
+}
+
+/* faq */
+.faq { max-width: 780px; }
+details { border-bottom: 1px solid var(--line); padding: 18px 0; }
+summary { cursor: pointer; font-weight: 600; font-size: 18px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--accent); font-size: 24px; line-height: 1; transition: transform .2s; }
+details[open] summary::after { transform: rotate(45deg); }
+details p { color: var(--muted); margin: 12px 0 0; }
+
+/* final cta */
+.final { padding: 0 0 90px; }
+.final .box {
+  background: var(--grad); color: #fff; border-radius: 32px; padding: 56px 40px; text-align: center;
+  position: relative; overflow: hidden;
+}
+.final .box::after {
+  content: ""; position: absolute; right: -120px; top: -120px; width: 380px; height: 380px; border-radius: 50%;
+  border: 28px solid rgba(255, 255, 255, .1);
+}
+.final h2 { color: #fff; }
+.final p { opacity: .9; font-size: 18px; margin: 0 auto 30px; max-width: 36em; }
+.final .cta { justify-content: center; position: relative; z-index: 1; }
+.final .btn-primary { background: #fff; color: #c41e45; box-shadow: none; }
+.final .btn-ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
+
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+footer a { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .hero { padding-top: 40px; }
+  .hero .wrap, .split { grid-template-columns: 1fr; }
+  .split.rev > :first-child { order: 0; }
+  .phones { height: 470px; max-width: 460px; margin: 0 auto; width: 100%; }
+  .phone { width: 210px; }
+  .features, .steps { grid-template-columns: 1fr 1fr; }
+  .stats .wrap { grid-template-columns: 1fr 1fr; }
+  .nav { display: none; }
+  .lang { margin-left: auto; }
+}
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .wrap { padding: 0 16px; }
+  section { padding: 60px 0; }
+  .features, .steps { grid-template-columns: 1fr; }
+  .phones { height: 420px; }
+  .phone { width: 168px; border-radius: 26px; padding: 6px; }
+  .phone img { border-radius: 21px; }
+  .phone.a { left: 2%; }
+  .phone.b { right: 2%; }
+  .gallery { gap: 14px; }
+  .gallery img { border-radius: 18px; }
+  .btn { width: 100%; justify-content: center; }
+  .final .box { padding: 44px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="icon.svg" alt="">RadioJeka</a>
+    <nav class="nav">
+      <a href="#features"><span lang="ru">Возможности</span><span lang="en">Features</span></a>
+      <a href="#screens"><span lang="ru">Скриншоты</span><span lang="en">Screenshots</span></a>
+      <a href="#install"><span lang="ru">Установка</span><span lang="en">Install</span></a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow"><span lang="ru">Бесплатно · без рекламы · Android 8.0+</span><span lang="en">Free · no ads · Android 8.0+</span></span>
+      <h1>
+        <span lang="ru">Всё радио мира<br><span class="grad">в одно касание</span></span>
+        <span lang="en">All the world's radio<br><span class="grad">one tap away</span></span>
+      </h1>
+      <p class="lead">
+        <span lang="ru">RadioJeka — простое интернет-радио для Android. Без регистрации, аккаунтов и лишних экранов: открыл, выбрал станцию, слушаешь.</span>
+        <span lang="en">RadioJeka is a simple internet radio app for Android. No sign-up, no accounts, no clutter: open it, pick a station, listen.</span>
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/WiverHome/RadioJeka">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span lang="ru">Открыть на GitHub</span><span lang="en">View on GitHub</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/WiverHome/RadioJeka/releases/latest/download/RadioJeka.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          <span lang="ru">Скачать APK</span><span lang="en">Download APK</span>
+        </a>
+      </div>
+      <ul class="facts">
+        <li><span lang="ru">Без регистрации</span><span lang="en">No sign-up</span></li>
+        <li><span lang="ru">Работает без VPN</span><span lang="en">Works without a VPN</span></li>
+        <li><span lang="ru">Открытый код (MIT)</span><span lang="en">Open source (MIT)</span></li>
+      </ul>
+    </div>
+    <div class="phones" aria-hidden="true">
+      <div class="phone a"><img src="screenshots/light-list.png" alt="" width="540" height="1200"></div>
+      <div class="phone b"><img src="screenshots/dark-player.png" alt="" width="540" height="1200"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="wrap">
+    <div class="stat"><b>5 800+</b><span lang="ru">станций в каталоге</span><span lang="en">stations in the catalog</span></div>
+    <div class="stat"><b>14</b><span lang="ru">категорий</span><span lang="en">genres</span></div>
+    <div class="stat"><b>0</b><span lang="ru">рекламы и трекеров</span><span lang="en">ads or trackers</span></div>
+    <div class="stat"><b>1</b><span lang="ru">касание до эфира</span><span lang="en">tap to go live</span></div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <h2><span lang="ru">Всё, что нужно для радио</span><span lang="en">Everything radio needs</span></h2>
+    <p class="sub">
+      <span lang="ru">Ничего лишнего: только станции, удобный плеер и управление отовсюду — из приложения, уведомления, экрана блокировки и наушников.</span>
+      <span lang="en">Nothing extra: just stations, a clean player and controls everywhere — in the app, the notification, the lock screen and your headphones.</span>
+    </p>
+    <div class="features">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg></div>
+        <h3><span lang="ru">Тысячи станций</span><span lang="en">Thousands of stations</span></h3>
+        <p><span lang="ru">Все радиостанции России и самые популярные в мире — переключайтесь между «Россия» и «Весь мир».</span><span lang="en">Every Russian radio station plus the most popular ones worldwide — switch between "Russia" and "World".</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2c3 3 4 6.5 4 10s-1 7-4 10c-3-3-4-6.5-4-10s1-7 4-10Z"/></svg></div>
+        <h3><span lang="ru">Работает без VPN</span><span lang="en">No VPN needed</span></h3>
+        <p><span lang="ru">Каталог встроен в приложение, поэтому список открывается сразу, даже если сайты каталогов недоступны.</span><span lang="en">The catalog ships inside the app, so the list opens instantly even when catalog websites are blocked.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+        <h3><span lang="ru">Быстрый поиск</span><span lang="en">Quick search</span></h3>
+        <p><span lang="ru">Ищите по названию с учётом выбранного региона и категории. Поиск работает и офлайн.</span><span lang="en">Search by name within the selected region and genre. Search works offline, too.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></div>
+        <h3><span lang="ru">Избранное</span><span lang="en">Favorites</span></h3>
+        <p><span lang="ru">Отметьте любимые станции сердечком — они всегда будут наверху списка.</span><span lang="en">Tap the heart on your favorite stations and they always stay at the top.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></div>
+        <h3><span lang="ru">Что сейчас играет</span><span lang="en">Now playing</span></h3>
+        <p><span lang="ru">Название песни и исполнитель прямо в плеере и уведомлении, если станция их передаёт.</span><span lang="en">Song title and artist right in the player and notification, whenever the station sends them.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></div>
+        <h3><span lang="ru">Назад и вперёд</span><span lang="en">Previous &amp; next</span></h3>
+        <p><span lang="ru">Листайте станции кнопками — в приложении, в уведомлении и на наушниках.</span><span lang="en">Flip through stations with buttons — in the app, the notification and on your headphones.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        <h3><span lang="ru">Играет в фоне</span><span lang="en">Background playback</span></h3>
+        <p><span lang="ru">Управление с экрана блокировки, а при отключении наушников — автоматическая пауза.</span><span lang="en">Control playback from the lock screen; it pauses automatically when headphones are unplugged.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg></div>
+        <h3><span lang="ru">Не обрывается</span><span lang="en">Auto-reconnect</span></h3>
+        <p><span lang="ru">Пропала связь в метро или лифте? Приложение само переподключится к эфиру.</span><span lang="en">Lost signal in the subway or an elevator? The app reconnects to the stream on its own.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/></svg></div>
+        <h3><span lang="ru">Светлая и тёмная тема</span><span lang="en">Light &amp; dark theme</span></h3>
+        <p><span lang="ru">Выберите тему или оставьте как в системе. На Android 12+ — цвета Material You под ваши обои.</span><span lang="en">Pick a theme or follow the system. On Android 12+ it uses Material You colors from your wallpaper.</span></p>
+      </div>
+    </div>
+    <div class="chips" aria-label="Genres">
+      <span class="chip"><span lang="ru">Поп</span><span lang="en">Pop</span></span>
+      <span class="chip"><span lang="ru">Рок</span><span lang="en">Rock</span></span>
+      <span class="chip"><span lang="ru">Новости</span><span lang="en">News</span></span>
+      <span class="chip"><span lang="ru">Разговорное</span><span lang="en">Talk</span></span>
+      <span class="chip"><span lang="ru">Танцевальная</span><span lang="en">Dance</span></span>
+      <span class="chip"><span lang="ru">Электроника</span><span lang="en">Electronic</span></span>
+      <span class="chip"><span lang="ru">Хип-хоп</span><span lang="en">Hip-hop</span></span>
+      <span class="chip"><span lang="ru">Ретро</span><span lang="en">Oldies</span></span>
+      <span class="chip"><span lang="ru">Шансон</span><span lang="en">Chanson</span></span>
+      <span class="chip"><span lang="ru">Джаз</span><span lang="en">Jazz</span></span>
+      <span class="chip"><span lang="ru">Классика</span><span lang="en">Classical</span></span>
+      <span class="chip"><span lang="ru">Лаунж</span><span lang="en">Lounge</span></span>
+      <span class="chip"><span lang="ru">Метал</span><span lang="en">Metal</span></span>
+      <span class="chip"><span lang="ru">Фолк</span><span lang="en">Folk</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- PLAYER + NOTIFICATION -->
+<section class="alt">
+  <div class="wrap split">
+    <img class="shot narrow" src="screenshots/light-player.png" alt="" width="540" height="1200" loading="lazy">
+    <div>
+      <h2><span lang="ru">Полноэкранный плеер</span><span lang="en">A full-screen player</span></h2>
+      <p class="sub" style="margin-bottom:0">
+        <span lang="ru">Коснитесь мини-плеера внизу — откроется большой плеер с логотипом станции и всем управлением под рукой.</span>
+        <span lang="en">Tap the mini player at the bottom to open a large player with the station logo and every control at hand.</span>
+      </p>
+      <ul>
+        <li><span lang="ru">Статус эфира: подключение, в эфире, переподключение</span><span lang="en">Live status: connecting, on air, reconnecting</span></li>
+        <li><span lang="ru">Страна и жанр станции, текущая песня</span><span lang="en">Station country and genre, current song</span></li>
+        <li><span lang="ru">Пауза, следующая и предыдущая станция</span><span lang="en">Pause, next and previous station</span></li>
+        <li><span lang="ru">Добавление в избранное одной кнопкой</span><span lang="en">Add to favorites with one button</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split rev">
+    <img class="shot" src="screenshots/notification.png" alt="" loading="lazy">
+    <div>
+      <h2><span lang="ru">Управление, не открывая приложение</span><span lang="en">Control it without opening the app</span></h2>
+      <p class="sub" style="margin-bottom:0">
+        <span lang="ru">Радио продолжает играть, когда экран выключен или вы в другом приложении. Переключайте станции из шторки уведомлений, с экрана блокировки или кнопками на наушниках.</span>
+        <span lang="en">Radio keeps playing with the screen off or while you're in another app. Switch stations from the notification shade, the lock screen or your headphone buttons.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section id="screens" class="alt">
+  <div class="wrap" style="text-align:center">
+    <h2><span lang="ru">Как это выглядит</span><span lang="en">See it in action</span></h2>
+    <p class="sub" style="margin-left:auto;margin-right:auto">
+      <span lang="ru">Чистый интерфейс в стиле Material 3 — днём и ночью.</span>
+      <span lang="en">A clean Material 3 interface — day and night.</span>
+    </p>
+    <div class="toggle" role="group" aria-label="Theme">
+      <button type="button" data-shots="light" aria-pressed="true"><span lang="ru">Светлая</span><span lang="en">Light</span></button>
+      <button type="button" data-shots="dark" aria-pressed="false"><span lang="ru">Тёмная</span><span lang="en">Dark</span></button>
+    </div>
+    <div class="gallery">
+      <figure>
+        <img id="shot-list" src="screenshots/light-list.png" alt="" width="540" height="1200" loading="lazy">
+        <figcaption><span lang="ru">Список станций и категории</span><span lang="en">Station list and genres</span></figcaption>
+      </figure>
+      <figure>
+        <img id="shot-player" src="screenshots/light-player.png" alt="" width="540" height="1200" loading="lazy">
+        <figcaption><span lang="ru">Плеер</span><span lang="en">Player</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="wrap">
+    <h2><span lang="ru">Установка за минуту</span><span lang="en">Install in a minute</span></h2>
+    <p class="sub">
+      <span lang="ru">Приложение распространяется через GitHub — бесплатно и без магазинов приложений.</span>
+      <span lang="en">The app is distributed through GitHub — free, no app store required.</span>
+    </p>
+    <div class="steps">
+      <div class="step">
+        <h3><span lang="ru">Скачайте</span><span lang="en">Download</span></h3>
+        <p><span lang="ru">Скачайте <a href="https://github.com/WiverHome/RadioJeka/releases/latest/download/RadioJeka.apk">RadioJeka.apk</a> на телефон.</span><span lang="en">Download <a href="https://github.com/WiverHome/RadioJeka/releases/latest/download/RadioJeka.apk">RadioJeka.apk</a> to your phone.</span></p>
+      </div>
+      <div class="step">
+        <h3><span lang="ru">Разрешите</span><span lang="en">Allow</span></h3>
+        <p><span lang="ru">Откройте файл. Если Android спросит, разрешите установку из этого источника.</span><span lang="en">Open the file. If Android asks, allow installs from this source.</span></p>
+      </div>
+      <div class="step">
+        <h3><span lang="ru">Слушайте</span><span lang="en">Listen</span></h3>
+        <p><span lang="ru">Нажмите «Установить», откройте приложение и выберите станцию.</span><span lang="en">Tap "Install", open the app and pick a station.</span></p>
+      </div>
+    </div>
+    <p class="note">
+      <span lang="ru">Google Play Защита может предупредить, что приложение ей незнакомо: оно распространяется не через Google Play. Нажмите «Подробнее» → «Всё равно установить». Требуется Android 8.0 или новее.</span>
+      <span lang="en">Google Play Protect may warn that it doesn't recognize the app, since it isn't distributed via Google Play. Tap "More details" → "Install anyway". Requires Android 8.0 or newer.</span>
+    </p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="alt">
+  <div class="wrap">
+    <h2><span lang="ru">Вопросы и ответы</span><span lang="en">FAQ</span></h2>
+    <div class="faq">
+      <details>
+        <summary><span lang="ru">Это бесплатно?</span><span lang="en">Is it free?</span></summary>
+        <p><span lang="ru">Да, полностью. Без рекламы, подписок и встроенных покупок. Код открыт под лицензией MIT.</span><span lang="en">Yes, completely. No ads, subscriptions or in-app purchases. The source code is open under the MIT license.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">Нужна ли регистрация?</span><span lang="en">Do I need an account?</span></summary>
+        <p><span lang="ru">Нет. Избранное и настройки хранятся только на вашем телефоне.</span><span lang="en">No. Favorites and settings are stored only on your phone.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">Откуда берутся станции?</span><span lang="en">Where do the stations come from?</span></summary>
+        <p><span lang="ru">Из открытой базы <a href="https://www.radio-browser.info">Radio Browser</a>, которую ведут слушатели со всего мира. Снимок базы встроен в приложение, а когда сайт доступен, приложение раз в сутки обновляет его в фоне.</span><span lang="en">From the open <a href="https://www.radio-browser.info">Radio Browser</a> database, maintained by listeners worldwide. A snapshot is built into the app, and when the site is reachable the app refreshes it in the background once a day.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">Приложение собирает мои данные?</span><span lang="en">Does the app collect my data?</span></summary>
+        <p><span lang="ru">Нет. Трансляции идут напрямую с серверов радиостанций, приложение ничего не собирает и не отправляет.</span><span lang="en">No. Streams come straight from the stations' servers; the app collects and sends nothing.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">Станция не играет или её нет в списке</span><span lang="en">A station doesn't play or is missing</span></summary>
+        <p><span lang="ru">Её можно исправить или добавить на <a href="https://www.radio-browser.info">radio-browser.info</a> — после обновления каталога она появится в RadioJeka. О других проблемах пишите в <a href="https://github.com/WiverHome/RadioJeka/issues">Issues</a>.</span><span lang="en">You can fix or add it on <a href="https://www.radio-browser.info">radio-browser.info</a> and it will appear in RadioJeka after the next catalog update. Report other problems in <a href="https://github.com/WiverHome/RadioJeka/issues">Issues</a>.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">Как обновить приложение?</span><span lang="en">How do I update?</span></summary>
+        <p><span lang="ru">Скачайте новую версию и установите поверх старой — избранное и настройки сохранятся.</span><span lang="en">Download the new version and install it over the old one — your favorites and settings are kept.</span></p>
+      </details>
+      <details>
+        <summary><span lang="ru">На каком языке интерфейс?</span><span lang="en">What language is the interface in?</span></summary>
+        <p><span lang="ru">На русском. Станции со всего мира доступны в разделе «Весь мир».</span><span lang="en">Russian. Stations from around the world are available in the "World" section.</span></p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final" style="padding-top:80px">
+  <div class="wrap">
+    <div class="box">
+      <h2><span lang="ru">Включите любимое радио</span><span lang="en">Tune in to your favorite radio</span></h2>
+      <p><span lang="ru">Исходный код, релизы и история изменений — на GitHub. Поставьте звезду, если приложение понравилось.</span><span lang="en">Source code, releases and changelog live on GitHub. Leave a star if you like the app.</span></p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/WiverHome/RadioJeka">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span lang="ru">Открыть на GitHub</span><span lang="en">View on GitHub</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/WiverHome/RadioJeka/releases/latest/download/RadioJeka.apk">
+          <span lang="ru">Скачать APK</span><span lang="en">Download APK</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© RadioJeka · <a href="https://github.com/WiverHome/RadioJeka/blob/main/LICENSE">MIT</a></span>
+    <span><span lang="ru">Названия и логотипы радиостанций принадлежат их владельцам.</span><span lang="en">Station names and logos belong to their owners.</span></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var meta = {
+    ru: { title: 'RadioJeka — интернет-радио для Android' },
+    en: { title: 'RadioJeka — internet radio for Android' }
+  };
+  function setLang(lang) {
+    root.lang = lang;
+    document.title = meta[lang].title;
+    document.querySelectorAll('[data-lang]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
+    });
+    try { localStorage.setItem('lang', lang); } catch (e) {}
+  }
+  var saved = null;
+  try { saved = localStorage.getItem('lang'); } catch (e) {}
+  var nav = (navigator.language || 'ru').toLowerCase();
+  setLang(saved || (/^(ru|uk|be|kk)/.test(nav) ? 'ru' : 'en'));
+  document.querySelectorAll('[data-lang]').forEach(function (b) {
+    b.addEventListener('click', function () { setLang(b.dataset.lang); });
+  });
+
+  document.querySelectorAll('[data-shots]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.dataset.shots;
+      document.getElementById('shot-list').src = 'screenshots/' + t + '-list.png';
+      document.getElementById('shot-player').src = 'screenshots/' + t + '-player.png';
+      document.querySelectorAll('[data-shots]').forEach(function (x) {
+        x.setAttribute('aria-pressed', String(x === b));
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
