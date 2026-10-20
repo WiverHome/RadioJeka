@@ -1,0 +1,37 @@
+# Сборка и юнит-тесты на каждый push в main и каждый PR.
+# Секреты не нужны: без keystore.properties релизная подпись не используется, собирается debug.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Сборка и тесты
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Кэш ~/.gradle (зависимости, обёртка, плагины)
+      - uses: gradle/actions/setup-gradle@v6
+
+      # Юнит-тестов в проекте пока нет (задача отработает без них), но новые подхватятся сами
+      - name: Сборка debug и юнит-тесты
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug testDebugUnitTest --console=plain
