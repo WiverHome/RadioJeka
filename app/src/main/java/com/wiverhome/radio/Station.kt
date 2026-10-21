@@ -16,7 +16,9 @@ data class Station(
 ) {
     /** "Russia · pop, rock · 128 kbps"; the country is skipped when the list is already filtered by it. */
     fun details(hideCountryCode: String?): String =
-        listOfNotNull(
+        if (CustomStation.isCustom(this)) {
+            listOf("Своя станция", CustomStation.host(this)).filter { it.isNotEmpty() }.joinToString(" · ")
+        } else listOfNotNull(
             country.ifBlank { null }?.takeUnless { hideCountryCode != null && countryCode.equals(hideCountryCode, true) },
             tags.split(',').map { it.trim() }.filter { it.isNotEmpty() }.take(2)
                 .joinToString(", ").ifBlank { null },

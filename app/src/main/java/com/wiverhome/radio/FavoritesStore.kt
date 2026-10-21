@@ -13,11 +13,23 @@ class FavoritesStore(context: Context) {
 
     fun toggle(station: Station) {
         val current = _items.value
-        val updated = if (current.any { it.id == station.id }) {
-            current.filterNot { it.id == station.id }
-        } else {
-            current + station
-        }
+        save(
+            if (current.any { it.id == station.id }) {
+                current.filterNot { it.id == station.id }
+            } else {
+                current + station
+            },
+        )
+    }
+
+    /** Возвращает станцию на прежнее место (отмена удаления). */
+    fun restore(station: Station, index: Int) {
+        val current = _items.value
+        if (current.any { it.id == station.id }) return
+        save(current.toMutableList().apply { add(index.coerceIn(0, size), station) })
+    }
+
+    fun save(updated: List<Station>) {
         _items.value = updated
         val array = JSONArray()
         updated.forEach { array.put(it.toJson()) }

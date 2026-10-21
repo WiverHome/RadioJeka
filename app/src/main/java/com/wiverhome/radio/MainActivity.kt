@@ -2,9 +2,12 @@ package com.wiverhome.radio
 
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -35,7 +38,24 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddLink
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
@@ -153,9 +173,26 @@ private fun RadioScreen(vm: RadioViewModel) {
     val region by vm.region.collectAsStateWithLifecycle()
     val genre by vm.genre.collectAsStateWithLifecycle()
     val theme by vm.theme.collectAsStateWithLifecycle()
+    val brokenIds by vm.brokenIds.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
     val favoriteIds = favorites.mapTo(HashSet()) { it.id }
     var showPlayer by rememberSaveable { mutableStateOf(false) }
+    var showAddStation by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val exportFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(vm::exportFavorites)
+    }
+    val importFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(vm::importFavorites)
+    }
+    LaunchedEffect(Unit) {
+        vm.messages.collect { message ->
+            // С кнопкой «Вернуть» — подольше, чтобы успеть нажать.
+            val duration = if (message.actionLabel != null) SnackbarDuration.Long else SnackbarDuration.Short
+            val result = snackbar.showSnackbar(message.text, actionLabel = message.actionLabel, duration = duration)
+            if (result == SnackbarResult.ActionPerformed) message.action?.invoke()
+        }
+    }
 
     /** [queue] is the list the station was picked from: next/previous walk through it. */
     @Composable
@@ -165,6 +202,7 @@ private fun RadioScreen(vm: RadioViewModel) {
         isFavorite = station.id in favoriteIds,
         isCurrent = station.id == player.station?.id,
         isPlaying = station.id == player.station?.id && player.playWhenReady && !player.error,
+        isBroken = station.id in brokenIds,
         onClick = {
             focus.clearFocus()
             vm.play(station, queue)
@@ -199,12 +237,18 @@ private fun RadioScreen(vm: RadioViewModel) {
                             keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
                         )
                         ThemeButton(theme, onSelect = vm::selectTheme)
-                        Spacer(Modifier.width(8.dp))
+                        MoreButton(
+                            onAddStation = { showAddStation = true },
+                            onExport = { exportFile.launch("RadioJeka-избранное.json") },
+                            onImport = { importFile.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                        )
+                        Spacer(Modifier.width(4.dp))
                     }
                     Filters(region, genre, onRegion = vm::selectRegion, onGenre = vm::selectGenre)
                 }
             }
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (player.station != null) {
                 MiniPlayer(player, onOpen = { showPlayer = true }, onToggle = vm::toggle)
@@ -269,9 +313,85 @@ private fun RadioScreen(vm: RadioViewModel) {
             onToggle = vm::toggle,
             onPrevious = vm::previous,
             onNext = vm::next,
+            onSleepTimer = vm::setSleepTimer,
             onDismiss = { showPlayer = false },
         )
     }
+    if (showAddStation) {
+        AddStationDialog(onAdd = vm::addCustomStation, onDismiss = { showAddStation = false })
+    }
+}
+
+@Composable
+private fun MoreButton(onAddStation: () -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "Ещё")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Добавить станцию по ссылке") },
+                leadingIcon = { Icon(Icons.Default.AddLink, contentDescription = null) },
+                onClick = { open = false; onAddStation() },
+            )
+            DropdownMenuItem(
+                text = { Text("Сохранить избранное в файл") },
+                leadingIcon = { Icon(Icons.Default.Upload, contentDescription = null) },
+                onClick = { open = false; onExport() },
+            )
+            DropdownMenuItem(
+                text = { Text("Загрузить избранное из файла") },
+                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
+                onClick = { open = false; onImport() },
+            )
+        }
+    }
+}
+
+/** [onAdd] возвращает текст ошибки или null, если станция добавлена. */
+@Composable
+private fun AddStationDialog(onAdd: (name: String, url: String) -> String?, onDismiss: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    fun submit() {
+        error = onAdd(name, url)
+        if (error == null) onDismiss()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Своя станция") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Вставьте ссылку на поток радиостанции. Станция появится в избранном.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it; error = null },
+                    label = { Text("Ссылка на поток") },
+                    placeholder = { Text("https://…") },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = error?.let { { Text(it) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название (необязательно)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = ::submit) { Text("Добавить") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable
@@ -357,11 +477,13 @@ private fun StationRow(
     isFavorite: Boolean,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    isBroken: Boolean,
     onClick: () -> Unit,
     onFavorite: () -> Unit,
 ) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
+        // Неотвечающая станция приглушена, но остаётся доступной: поток могли уже починить.
+        modifier = Modifier.clickable(onClick = onClick).alpha(if (isBroken && !isCurrent) 0.55f else 1f),
         colors = if (isCurrent) {
             ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         } else {
@@ -386,8 +508,21 @@ private fun StationRow(
         headlineContent = {
             Text(station.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
-        supportingContent = details.takeIf { it.isNotEmpty() }?.let {
-            { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        supportingContent = when {
+            isBroken -> {
+                {
+                    Text(
+                        listOf("Не отвечает", details).filter { it.isNotEmpty() }.joinToString(" · "),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            details.isNotEmpty() -> {
+                { Text(details, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            else -> null
         },
         trailingContent = {
             IconButton(onClick = onFavorite) {
@@ -501,6 +636,7 @@ private fun FullPlayer(
     onToggle: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onSleepTimer: (minutes: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val station = state.station ?: return
@@ -560,14 +696,63 @@ private fun FullPlayer(
                 }
             }
             Spacer(Modifier.height(24.dp))
-            FilledTonalButton(onClick = onFavorite) {
-                Icon(
-                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(onClick = onFavorite) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isFavorite) "В избранном" else "В избранное")
+                }
+                SleepTimerButton(state.sleepAt, onSleepTimer)
+            }
+            if (state.sleepAt > 0) {
+                // Обновляем подпись раз в несколько секунд, пока плеер открыт.
+                val now by produceState(SystemClock.elapsedRealtime(), state.sleepAt) {
+                    while (true) {
+                        value = SystemClock.elapsedRealtime()
+                        delay(5_000)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    SleepTimer.label(state.sleepAt, now),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(if (isFavorite) "В избранном" else "В избранное")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SleepTimerButton(sleepAt: Long, onSleepTimer: (minutes: Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilledTonalButton(onClick = { open = true }) {
+            Icon(
+                if (sleepAt > 0) Icons.Default.Bedtime else Icons.Outlined.Bedtime,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("Таймер сна")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            SleepTimer.OPTIONS.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(SleepTimer.duration(minutes)) },
+                    onClick = { open = false; onSleepTimer(minutes) },
+                )
+            }
+            if (sleepAt > 0) {
+                DropdownMenuItem(
+                    text = { Text("Выключить таймер") },
+                    leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
+                    onClick = { open = false; onSleepTimer(0) },
+                )
             }
         }
     }
