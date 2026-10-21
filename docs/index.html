@@ -152,6 +152,8 @@ h2 { font-size: clamp(30px, 4vw, 42px); line-height: 1.15; letter-spacing: -.8px
 .card h3 { margin: 0 0 6px; font-size: 19px; }
 .card p { margin: 0; color: var(--muted); font-size: 16px; }
 
+.features.two { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 600px) { .features.two { grid-template-columns: 1fr; } }
 .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
 .chip { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 15px; }
 
@@ -260,6 +262,7 @@ footer a { color: var(--muted); }
     <a class="brand" href="#"><img src="icon.svg" alt="">RadioJeka</a>
     <nav class="nav">
       <a href="#features"><span lang="ru">Возможности</span><span lang="en">Features</span></a>
+      <a href="#new"><span lang="ru">Что нового</span><span lang="en">What's new</span></a>
       <a href="#screens"><span lang="ru">Скриншоты</span><span lang="en">Screenshots</span></a>
       <a href="#install"><span lang="ru">Установка</span><span lang="en">Install</span></a>
       <a href="#faq">FAQ</a>
@@ -311,7 +314,7 @@ footer a { color: var(--muted); }
 <!-- STATS -->
 <div class="stats">
   <div class="wrap">
-    <div class="stat"><b>5 800+</b><span lang="ru">станций в каталоге</span><span lang="en">stations in the catalog</span></div>
+    <div class="stat"><b>5 900+</b><span lang="ru">станций в каталоге</span><span lang="en">stations in the catalog</span></div>
     <div class="stat"><b>14</b><span lang="ru">категорий</span><span lang="en">genres</span></div>
     <div class="stat"><b>0</b><span lang="ru">рекламы и трекеров</span><span lang="en">ads or trackers</span></div>
     <div class="stat"><b>1</b><span lang="ru">касание до эфира</span><span lang="en">tap to go live</span></div>
@@ -319,7 +322,7 @@ footer a { color: var(--muted); }
 </div>
 
 <!-- FEATURES -->
-<section id="features">
+<section id="features" class="alt">
   <div class="wrap">
     <h2><span lang="ru">Всё, что нужно для радио</span><span lang="en">Everything radio needs</span></h2>
     <p class="sub">
@@ -388,6 +391,40 @@ footer a { color: var(--muted); }
       <span class="chip"><span lang="ru">Лаунж</span><span lang="en">Lounge</span></span>
       <span class="chip"><span lang="ru">Метал</span><span lang="en">Metal</span></span>
       <span class="chip"><span lang="ru">Фолк</span><span lang="en">Folk</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- NEW IN 1.1.0 -->
+<section id="new">
+  <div class="wrap">
+    <span class="eyebrow"><span lang="ru">Версия 1.1.0</span><span lang="en">Version 1.1.0</span></span>
+    <h2 style="margin-top:14px"><span lang="ru">Что нового</span><span lang="en">What's new</span></h2>
+    <p class="sub">
+      <span lang="ru">Обновление ставится поверх прежней версии — избранное и настройки сохраняются.</span>
+      <span lang="en">Install it over the previous version — your favorites and settings are kept.</span>
+    </p>
+    <div class="features two">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></div>
+        <h3><span lang="ru">Таймер сна</span><span lang="en">Sleep timer</span></h3>
+        <p><span lang="ru">Радио само выключится через 15, 30, 45 минут, час или полтора — даже если приложение закрыто.</span><span lang="en">Radio turns itself off after 15, 30, 45 minutes, an hour or an hour and a half — even with the app closed.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></div>
+        <h3><span lang="ru">Своя станция по ссылке</span><span lang="en">Add any station by link</span></h3>
+        <p><span lang="ru">Нет нужной станции? Вставьте адрес потока — она появится в избранном.</span><span lang="en">Missing a station? Paste its stream address and it lands in your favorites.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M3 9l2 2-2 2M21 9l-2 2 2 2"/></svg></div>
+        <h3><span lang="ru">Перенос избранного</span><span lang="en">Move favorites to a new phone</span></h3>
+        <p><span lang="ru">Сохраните избранное в файл и загрузите его на другом телефоне — без повторов.</span><span lang="en">Save your favorites to a file and load it on another phone — no duplicates.</span></p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div>
+        <h3><span lang="ru">Неотвечающие станции не мешают</span><span lang="en">Dead stations stay out of the way</span></h3>
+        <p><span lang="ru">Станция, которая не заиграла, приглушена и уходит в конец списка, пока снова не заработает.</span><span lang="en">A station that failed to play is dimmed and moved to the end of the list until it works again.</span></p>
+      </div>
     </div>
   </div>
 </section>

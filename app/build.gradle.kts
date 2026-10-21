@@ -14,8 +14,8 @@ android {
         applicationId = "com.wiverhome.radio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     // Release key lives outside git: keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
@@ -54,7 +54,7 @@ android {
     }
 }
 
-// app-release.apk -> RadioJeka-1.0.0.apk
+// app-release.apk -> RadioJeka-1.1.0.apk
 android.applicationVariants.all {
     outputs.all {
         (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
