@@ -2,8 +2,10 @@ package com.wiverhome.radio
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -17,6 +19,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -25,6 +29,8 @@ import com.google.common.util.concurrent.ListenableFuture
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private val handler = Handler(Looper.getMainLooper())
+    /** Отдельно от таймера сна: смена станции сбрасывает переподключения, но не таймер. */
+    private val retryHandler = Handler(Looper.getMainLooper())
     private var retries = 0
 
     override fun onCreate() {
@@ -54,6 +60,22 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
+    /**
+     * Таймер сна живёт в службе, а не в экране: он должен сработать, даже если приложение закрыто.
+     * Время срабатывания отдаётся экрану через extras сессии.
+     */
+    private fun setSleepTimer(minutes: Int) {
+        handler.removeCallbacks(sleep)
+        val deadline = if (minutes > 0) SleepTimer.deadline(SystemClock.elapsedRealtime(), minutes) else 0L
+        if (deadline > 0) handler.postAtTime(sleep, deadline)
+        session?.setSessionExtras(Bundle().apply { putLong(EXTRA_SLEEP_AT, deadline) })
+    }
+
+    private val sleep = Runnable {
+        session?.player?.pause()
+        setSleepTimer(0)
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -63,6 +85,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        retryHandler.removeCallbacksAndMessages(null)
         session?.run {
             player.release()
             release()
@@ -72,7 +95,32 @@ class PlaybackService : MediaSessionService() {
     }
 
     /** The stream URI travels from the app in requestMetadata; restore it here. */
-    private class SessionCallback : MediaSession.Callback {
+    private inner class SessionCallback : MediaSession.Callback {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand(CMD_SLEEP_TIMER, Bundle.EMPTY))
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction != CMD_SLEEP_TIMER) {
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+            }
+            setSleepTimer(args.getInt(EXTRA_MINUTES))
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -95,7 +143,7 @@ class PlaybackService : MediaSessionService() {
         override fun onPlayerError(error: PlaybackException) {
             if (retries >= MAX_RETRIES || !player.playWhenReady) return
             retries++
-            handler.postDelayed({
+            retryHandler.postDelayed({
                 player.seekToDefaultPosition()
                 player.prepare()
             }, RETRY_DELAY_MS * retries)
@@ -108,7 +156,7 @@ class PlaybackService : MediaSessionService() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
                 retries = 0
-                handler.removeCallbacksAndMessages(null)
+                retryHandler.removeCallbacksAndMessages(null)
             }
         }
 
@@ -132,8 +180,13 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private companion object {
-        const val MAX_RETRIES = 3
-        const val RETRY_DELAY_MS = 2000L
+    companion object {
+        /** Команда экрана службе: «таймер сна на N минут» (0 — выключить). */
+        const val CMD_SLEEP_TIMER = "com.wiverhome.radio.SLEEP_TIMER"
+        const val EXTRA_MINUTES = "minutes"
+        /** Extras сессии: когда сработает таймер, по SystemClock.elapsedRealtime(); 0 — таймер выключен. */
+        const val EXTRA_SLEEP_AT = "sleepAt"
+        private const val MAX_RETRIES = 3
+        private const val RETRY_DELAY_MS = 2000L
     }
 }

@@ -12,12 +12,17 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -28,6 +33,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -45,7 +51,12 @@ data class PlayerState(
     val error: Boolean = false,
     /** More than one station queued, so next/previous make sense. */
     val hasQueue: Boolean = false,
+    /** Когда сработает таймер сна (SystemClock.elapsedRealtime()); 0 — таймер выключен. */
+    val sleepAt: Long = 0L,
 )
+
+/** Короткое сообщение внизу экрана, при желании с кнопкой («Вернуть»). */
+data class UiMessage(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class RadioViewModel(app: Application) : AndroidViewModel(app) {
@@ -65,6 +76,17 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
     val genre: StateFlow<Genre?> = _genre.asStateFlow()
     private val reload = MutableStateFlow(0)
 
+    private val brokenPrefs = app.getSharedPreferences("broken", Context.MODE_PRIVATE)
+    private val broken = BrokenStations(
+        brokenPrefs.all.mapNotNull { (id, at) -> (at as? Long)?.let { id to it } }.toMap(),
+    ).also { if (it.prune(System.currentTimeMillis())) saveBroken(it) }
+    private val _brokenIds = MutableStateFlow(broken.snapshot().keys)
+    /** Станции, которые не заиграли при последней попытке: в списке они приглушены и стоят в конце. */
+    val brokenIds: StateFlow<Set<String>> = _brokenIds.asStateFlow()
+
+    private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 4)
+    val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
+
     val list: StateFlow<ListState> = combine(
         query.map { it.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0L else 400L },
         _region,
@@ -82,7 +104,8 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                     emit(ListState.Failed)
                     return@flow
                 }
-                emit(ListState.Ready(local))
+                val now = System.currentTimeMillis()
+                emit(ListState.Ready(broken.workingFirst(local, now)))
                 // The built-in catalog has every Russian station but only the world's most popular,
                 // so name searches also ask the online catalog when it's reachable.
                 if (q.isEmpty()) return@flow
@@ -94,7 +117,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                     return@flow
                 }
                 val merged = (local + online).distinctBy { it.url }.sortedByDescending { it.clicks }
-                if (merged.size > local.size) emit(ListState.Ready(merged))
+                if (merged.size > local.size) emit(ListState.Ready(broken.workingFirst(merged, now)))
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ListState.Loading)
@@ -104,7 +127,9 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
 
     private val controllerFuture = MediaController.Builder(
         app, SessionToken(app, ComponentName(app, PlaybackService::class.java)),
-    ).buildAsync()
+    ).setListener(object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: Bundle) = syncSleep(extras)
+    }).buildAsync()
     private var controller: MediaController? = null
     private var current: Station? = null
 
@@ -122,6 +147,7 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 controller = c
                 c.addListener(listener)
                 sync(c)
+                syncSleep(c.sessionExtras)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -149,7 +175,87 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
         _genre.value = if (genre == _genre.value) null else genre
     }
 
-    fun toggleFavorite(station: Station) = favorites.toggle(station)
+    fun toggleFavorite(station: Station) {
+        val index = favorites.items.value.indexOfFirst { it.id == station.id }
+        favorites.toggle(station)
+        // Свою станцию больше негде найти, поэтому удаление можно отменить.
+        if (index >= 0 && CustomStation.isCustom(station)) {
+            _messages.tryEmit(UiMessage("Станция «${station.name}» удалена", "Вернуть") { favorites.restore(station, index) })
+        }
+    }
+
+    /** Добавляет свою станцию в избранное; при ошибке возвращает текст для поля ввода. */
+    fun addCustomStation(name: String, url: String): String? =
+        when (val result = CustomStation.create(name, url)) {
+            is CustomStation.Result.Error -> result.message
+            is CustomStation.Result.Ok -> {
+                favorites.save(favorites.items.value + result.station)
+                _messages.tryEmit(UiMessage("Станция «${result.station.name}» добавлена в избранное"))
+                null
+            }
+        }
+
+    fun exportFavorites(uri: Uri) {
+        val text = FavoritesBackup.encode(favorites.items.value)
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!
+                        .use { it.write(text.toByteArray()) }
+                }.isSuccess
+            }
+            _messages.tryEmit(UiMessage(if (ok) "Избранное сохранено в файл" else "Не удалось сохранить файл"))
+        }
+    }
+
+    fun importFavorites(uri: Uri) {
+        viewModelScope.launch {
+            val imported = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = getApplication<Application>().contentResolver.openInputStream(uri)!!
+                        .use { it.readBytes().decodeToString() }
+                    FavoritesBackup.decode(text)
+                }.getOrNull()
+            }
+            if (imported == null) {
+                _messages.tryEmit(UiMessage("Это не файл избранного RadioJeka"))
+                return@launch
+            }
+            val before = favorites.items.value
+            val merged = FavoritesBackup.merge(before, imported)
+            favorites.save(merged)
+            val added = merged.size - before.size
+            _messages.tryEmit(
+                UiMessage(if (added > 0) "Добавлено станций: $added" else "Все станции из файла уже в избранном"),
+            )
+        }
+    }
+
+    /** Таймер сна: [minutes] = 0 выключает. Сам таймер работает в службе воспроизведения. */
+    fun setSleepTimer(minutes: Int) {
+        val c = controller ?: return
+        c.sendCustomCommand(
+            SessionCommand(PlaybackService.CMD_SLEEP_TIMER, Bundle.EMPTY),
+            Bundle().apply { putInt(PlaybackService.EXTRA_MINUTES, minutes) },
+        )
+    }
+
+    private fun syncSleep(extras: Bundle) {
+        _player.value = _player.value.copy(sleepAt = extras.getLong(PlaybackService.EXTRA_SLEEP_AT))
+    }
+
+    private fun saveBroken(b: BrokenStations) {
+        brokenPrefs.edit().clear().apply {
+            b.snapshot().forEach { (id, at) -> putLong(id, at) }
+        }.apply()
+    }
+
+    private fun updateBroken(id: String, failed: Boolean) {
+        val changed = if (failed) broken.markBroken(id, System.currentTimeMillis()) else broken.markWorking(id)
+        if (!changed) return
+        saveBroken(broken)
+        _brokenIds.value = broken.snapshot().keys
+    }
 
     /** Plays [station]; [queue] (the list it was picked from) feeds next/previous, also in the notification. */
     fun play(station: Station, queue: List<Station>) {
@@ -162,7 +268,10 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         current = station
-        _player.value = PlayerState(station = station, playWhenReady = true, buffering = true, hasQueue = stations.size > 1)
+        _player.value = PlayerState(
+            station = station, playWhenReady = true, buffering = true, hasQueue = stations.size > 1,
+            sleepAt = _player.value.sleepAt,
+        )
         c.setMediaItems(stations.map(::mediaItem), index, C.TIME_UNSET)
         c.prepare()
         c.play()
@@ -228,7 +337,12 @@ class RadioViewModel(app: Application) : AndroidViewModel(app) {
                 ?: it.mediaMetadata.extras?.getString(EXTRA_STATION)?.let { json -> Station.fromJson(JSONObject(json)) }
         }
         current = station
+        if (station != null) {
+            if (p.playerError != null) updateBroken(station.id, failed = true)
+            else if (p.isPlaying) updateBroken(station.id, failed = false)
+        }
         _player.value = PlayerState(
+            sleepAt = _player.value.sleepAt,
             station = station,
             playWhenReady = p.playWhenReady,
             buffering = p.playWhenReady && p.playbackState == Player.STATE_BUFFERING,

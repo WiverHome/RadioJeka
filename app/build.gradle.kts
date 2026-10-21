@@ -75,4 +75,8 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.8.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    testImplementation("junit:junit:4.13.2")
+    // В юнит-тестах android.jar — заглушки; настоящий org.json нужен для резервной копии и Station.toJson.
+    testImplementation("org.json:json:20240303")
 }
