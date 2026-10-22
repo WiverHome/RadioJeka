@@ -11,14 +11,19 @@ import java.io.File
 
 /**
  * Offline station catalog: a Radio Browser snapshot shipped in assets (tools/update_catalog.py),
- * plus a lighter, fresher copy in filesDir downloaded whenever the online catalog is reachable.
+ * replaced by a fresher copy in filesDir whenever the online catalog is reachable.
  * Works without access to radio-browser.info (blocked in Russia without a VPN).
+ *
+ * Основной снимок (Россия + топ-4000 мира) читается сразу при запуске. Редкие станции мира лежат
+ * в отдельном файле и подгружаются уже после показа списка ([loadWorldExtras]), чтобы не задерживать запуск.
  */
 class StationCatalog(context: Context) {
     private val app = context.applicationContext
     private val file = File(app.filesDir, FILE_NAME)
     private val prefs = app.getSharedPreferences("catalog", Context.MODE_PRIVATE)
     private val mutex = Mutex()
+    private var core: List<Station>? = null
+    private var extras: List<Station>? = null
     private var stations: List<Station>? = null
 
     suspend fun query(name: String, countryCode: String?, tags: List<String>): List<Station> {
@@ -31,6 +36,17 @@ class StationCatalog(context: Context) {
                 .take(LIMIT)
                 .toList()
         }
+    }
+
+    /** Читает редкие станции мира из встроенного файла. Возвращает true, если каталог пополнился. */
+    suspend fun loadWorldExtras(): Boolean {
+        if (mutex.withLock { extras != null }) return false
+        val parsed = withContext(Dispatchers.IO) { parse(readAsset(WORLD_FILE_NAME)) }
+        mutex.withLock {
+            extras = parsed
+            stations = null
+        }
+        return true
     }
 
     /** Downloads a fresh snapshot at most once a day. Returns true if the catalog changed. */
@@ -50,19 +66,25 @@ class StationCatalog(context: Context) {
             tmp.writeText(array.toString())
             tmp.renameTo(file)
         }
-        // Перечитаем при следующем запросе: свежий снимок склеивается со встроенным.
-        mutex.withLock { stations = null }
+        mutex.withLock {
+            core = fresh
+            stations = null
+        }
         prefs.edit().putLong(KEY_UPDATED, System.currentTimeMillis()).apply()
         return true
     }
 
     private suspend fun load(): List<Station> = mutex.withLock {
-        stations ?: withContext(Dispatchers.IO) {
-            val fresh = file.takeIf { it.exists() }?.runCatching { parse(readText()) }?.getOrNull().orEmpty()
-            val bundled = parse(app.assets.open(FILE_NAME).bufferedReader().use { it.readText() })
-            merge(fresh, bundled)
-        }.also { stations = it }
+        stations ?: run {
+            val base = core ?: withContext(Dispatchers.IO) {
+                file.takeIf { it.exists() }?.runCatching { parse(readText()) }?.getOrNull()
+                    ?: parse(readAsset(FILE_NAME))
+            }.also { core = it }
+            merge(base, extras.orEmpty()).also { stations = it }
+        }
     }
+
+    private fun readAsset(name: String) = app.assets.open(name).bufferedReader().use { it.readText() }
 
     private fun parse(text: String): List<Station> {
         val array = JSONArray(text)
@@ -76,21 +98,21 @@ class StationCatalog(context: Context) {
 
     companion object {
         /**
-         * Свежий снимок из сети (Россия + топ-4000 мира, обновляется раз в день) плюс встроенный
-         * расширенный каталог (Россия + топ-15000 мира, обновляется с выпуском приложения).
-         * Свежие данные важнее: при совпадении станции по id или ссылке остаётся запись из [fresh].
+         * Основной снимок (свежий из сети или встроенный) плюс редкие станции мира из встроенного файла.
+         * Основной важнее: при совпадении станции по id или ссылке остаётся запись из [core].
          */
-        fun merge(fresh: List<Station>, bundled: List<Station>): List<Station> =
-            (fresh + bundled)
+        fun merge(core: List<Station>, extras: List<Station>): List<Station> =
+            (core + extras)
                 .distinctBy { it.id.ifEmpty { it.url } }
                 .distinctBy { it.url }
                 .sortedByDescending { it.clicks }
 
         private const val FILE_NAME = "stations.json"
-        const val KEY_UPDATED = "updated"
-        const val LIMIT = 200
-        const val MIN_VALID_SIZE = 1000
-        const val REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
+        private const val WORLD_FILE_NAME = "stations_world.json"
+        private const val KEY_UPDATED = "updated"
+        private const val LIMIT = 200
+        private const val MIN_VALID_SIZE = 1000
+        private const val REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000L
     }
 }
 

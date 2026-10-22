@@ -8,19 +8,19 @@ class StationCatalogMergeTest {
         Station(id, name, url, "", "", "", "", 0, clicks)
 
     @Test
-    fun bundledAddsStationsMissingFromFresh() {
+    fun extrasAddStationsMissingFromCore() {
         val merged = StationCatalog.merge(
-            fresh = listOf(station("a", clicks = 10)),
-            bundled = listOf(station("a", clicks = 5), station("rare", clicks = 1)),
+            core = listOf(station("a", clicks = 10)),
+            extras = listOf(station("a", clicks = 5), station("rare", clicks = 1)),
         )
         assertEquals(listOf("a", "rare"), merged.map { it.id })
     }
 
     @Test
-    fun freshWinsOnSameId() {
+    fun coreWinsOnSameId() {
         val merged = StationCatalog.merge(
-            fresh = listOf(station("a", url = "http://new", name = "Новое")),
-            bundled = listOf(station("a", url = "http://old", name = "Старое")),
+            core = listOf(station("a", url = "http://new", name = "Новое")),
+            extras = listOf(station("a", url = "http://old", name = "Старое")),
         )
         assertEquals(1, merged.size)
         assertEquals("http://new", merged[0].url)
@@ -29,8 +29,8 @@ class StationCatalogMergeTest {
     @Test
     fun sameLinkIsKeptOnce() {
         val merged = StationCatalog.merge(
-            fresh = listOf(station("a", url = "http://same")),
-            bundled = listOf(station("b", url = "http://same")),
+            core = listOf(station("a", url = "http://same")),
+            extras = listOf(station("b", url = "http://same")),
         )
         assertEquals(listOf("a"), merged.map { it.id })
     }
@@ -38,15 +38,15 @@ class StationCatalogMergeTest {
     @Test
     fun sortedByPopularity() {
         val merged = StationCatalog.merge(
-            fresh = listOf(station("low", clicks = 1)),
-            bundled = listOf(station("high", clicks = 100)),
+            core = listOf(station("low", clicks = 1)),
+            extras = listOf(station("high", clicks = 100)),
         )
         assertEquals(listOf("high", "low"), merged.map { it.id })
     }
 
     @Test
-    fun worksWithoutFreshSnapshot() {
-        val merged = StationCatalog.merge(emptyList(), listOf(station("a"), station("b")))
+    fun worksWithoutExtras() {
+        val merged = StationCatalog.merge(listOf(station("a"), station("b")), emptyList())
         assertEquals(2, merged.size)
     }
 }

@@ -1,10 +1,13 @@
-"""Downloads the built-in station catalog (app/src/main/assets/stations.json) from Radio Browser.
+"""Downloads the built-in station catalog (app/src/main/assets) from Radio Browser.
 
 The app ships this snapshot so the list works where radio-browser.info is unreachable (e.g. Russia
 without a VPN). Run before a release:  python tools/update_catalog.py
 
-The bundled list is wider than the app's daily online refresh (RadioApi.snapshot: Russia + world top 4000):
-rare world stations come only from here, so the app merges both (StationCatalog.merge).
+Two files:
+- stations.json — every Russian station plus the world top 4000; read at startup and replaced in the app
+  by the same daily online snapshot (RadioApi.snapshot);
+- stations_world.json — rarer world stations (up to the world top 15000), read after the list is shown
+  (StationCatalog.loadWorldExtras) so a bigger catalog doesn't slow the startup.
 """
 import json
 import os
@@ -12,8 +15,9 @@ import urllib.parse
 import urllib.request
 
 HOSTS = ["de1.api.radio-browser.info", "all.api.radio-browser.info"]
-WORLD_TOP = 15000
-OUT = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets", "stations.json")
+WORLD_TOP = 4000
+WORLD_EXTRA_TOP = 15000
+ASSETS = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets")
 
 
 def fetch(params):
@@ -42,19 +46,35 @@ def compact(s):
     }
 
 
-def main():
-    raw = fetch({"countrycode": "RU", "limit": 100000}) + fetch({"limit": WORLD_TOP})
-    seen, stations = set(), []
+def unique(raw, seen):
+    out = []
     for s in raw:
         c = compact(s)
         if c and c["u"] not in seen:
             seen.add(c["u"])
-            stations.append(c)
-    stations.sort(key=lambda s: -s["k"])
-    with open(OUT, "w", encoding="utf-8") as f:
+            out.append(c)
+    out.sort(key=lambda s: -s["k"])
+    return out
+
+
+def save(name, stations):
+    path = os.path.join(ASSETS, name)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(stations, f, ensure_ascii=False, separators=(",", ":"))
-    ru = sum(1 for s in stations if s["cc"] == "RU")
-    print(f"{len(stations)} stations ({ru} RU), {os.path.getsize(OUT) // 1024} KB -> {os.path.normpath(OUT)}")
+    print(f"{len(stations)} stations, {os.path.getsize(path) // 1024} KB -> {os.path.normpath(path)}")
+
+
+def main():
+    russia = fetch({"countrycode": "RU", "limit": 100000})
+    world = fetch({"limit": WORLD_EXTRA_TOP})
+    seen = set()
+    core = unique(russia + world[:WORLD_TOP], seen)
+    extra = unique(world[WORLD_TOP:], seen)
+    save("stations.json", core)
+    save("stations_world.json", extra)
+    ru = sum(1 for s in core if s["cc"] == "RU")
+    countries = len({s["cc"] for s in core + extra})
+    print(f"total {len(core) + len(extra)} stations ({ru} RU) from {countries} countries")
 
 
 if __name__ == "__main__":
