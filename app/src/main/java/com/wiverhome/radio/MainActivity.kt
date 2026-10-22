@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 internal const val TAG_SEARCH = "search"
 internal const val TAG_STATION = "station"
 internal const val TAG_MINI_PLAYER = "miniPlayer"
+internal const val TAG_MINI_TOGGLE = "miniToggle"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

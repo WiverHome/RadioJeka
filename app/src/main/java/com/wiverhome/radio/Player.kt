@@ -112,7 +112,7 @@ internal fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> 
                 )
             }
             Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = onToggle, modifier = Modifier.size(52.dp)) {
+            FilledIconButton(onClick = onToggle, modifier = Modifier.size(52.dp).testTag(TAG_MINI_TOGGLE)) {
                 PlayButtonContent(state, 28.dp)
             }
         }
