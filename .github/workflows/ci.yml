@@ -37,9 +37,14 @@ jobs:
           ./gradlew assembleDebug testDebugUnitTest --console=plain
 
   ui-tests:
-    name: Тесты интерфейса на эмуляторе
+    name: Тесты интерфейса на Android ${{ matrix.api-level }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # 34 — Android 14, 36 — Android 16 (targetSdk приложения)
+        api-level: [34, 36]
     steps:
       - uses: actions/checkout@v7
 
@@ -57,11 +62,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Тесты лежат в app/src/androidTest; эмулятор Android 14 запускается и выключается сам
+      # Тесты лежат в app/src/androidTest; эмулятор запускается и выключается сам
       - name: Тесты интерфейса
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           disable-animations: true
