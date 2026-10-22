@@ -45,7 +45,10 @@ object RadioApi {
         }
     }
 
-    /** Same content as tools/update_catalog.py: every Russian station plus the world's most popular. */
+    /**
+     * Same content as stations.json from tools/update_catalog.py: every Russian station plus the world's
+     * most popular. Rarer world stations stay in the bundled stations_world.json (StationCatalog.loadWorldExtras).
+     */
     suspend fun snapshot(): List<Station> = coroutineScope {
         val russia = async { search(listOf("countrycode=RU"), limit = 100_000) }
         val world = async { search(emptyList(), limit = SNAPSHOT_WORLD_TOP) }
