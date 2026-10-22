@@ -26,7 +26,7 @@ def fetch(params):
     for host in HOSTS:
         try:
             req = urllib.request.Request(f"https://{host}/json/stations/search?{query}",
-                                         headers={"User-Agent": "RadioJeka/1.1"})
+                                         headers={"User-Agent": "RadioJeka/1.2"})
             with urllib.request.urlopen(req, timeout=180) as r:
                 return json.load(r)
         except Exception as e:  # try the next mirror
