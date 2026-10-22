@@ -2,6 +2,9 @@
 
 The app ships this snapshot so the list works where radio-browser.info is unreachable (e.g. Russia
 without a VPN). Run before a release:  python tools/update_catalog.py
+
+The bundled list is wider than the app's daily online refresh (RadioApi.snapshot: Russia + world top 4000):
+rare world stations come only from here, so the app merges both (StationCatalog.merge).
 """
 import json
 import os
@@ -9,7 +12,7 @@ import urllib.parse
 import urllib.request
 
 HOSTS = ["de1.api.radio-browser.info", "all.api.radio-browser.info"]
-WORLD_TOP = 4000
+WORLD_TOP = 15000
 OUT = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets", "stations.json")
 
 
@@ -20,7 +23,7 @@ def fetch(params):
         try:
             req = urllib.request.Request(f"https://{host}/json/stations/search?{query}",
                                          headers={"User-Agent": "RadioJeka/1.1"})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=180) as r:
                 return json.load(r)
         except Exception as e:  # try the next mirror
             last = e

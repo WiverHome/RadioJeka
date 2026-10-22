@@ -11,7 +11,7 @@ import java.io.File
 
 /**
  * Offline station catalog: a Radio Browser snapshot shipped in assets (tools/update_catalog.py),
- * replaced by a fresher copy in filesDir whenever the online catalog is reachable.
+ * plus a lighter, fresher copy in filesDir downloaded whenever the online catalog is reachable.
  * Works without access to radio-browser.info (blocked in Russia without a VPN).
  */
 class StationCatalog(context: Context) {
@@ -50,20 +50,23 @@ class StationCatalog(context: Context) {
             tmp.writeText(array.toString())
             tmp.renameTo(file)
         }
-        mutex.withLock { stations = fresh.sortedByDescending { it.clicks } }
+        // Перечитаем при следующем запросе: свежий снимок склеивается со встроенным.
+        mutex.withLock { stations = null }
         prefs.edit().putLong(KEY_UPDATED, System.currentTimeMillis()).apply()
         return true
     }
 
     private suspend fun load(): List<Station> = mutex.withLock {
         stations ?: withContext(Dispatchers.IO) {
-            val text = file.takeIf { it.exists() }?.runCatching { readText() }?.getOrNull()
-                ?: app.assets.open(FILE_NAME).bufferedReader().use { it.readText() }
-            val array = JSONArray(text)
-            (0 until array.length())
-                .mapNotNull { Station.fromCompactJson(array.getJSONObject(it)) }
-                .sortedByDescending { it.clicks }
+            val fresh = file.takeIf { it.exists() }?.runCatching { parse(readText()) }?.getOrNull().orEmpty()
+            val bundled = parse(app.assets.open(FILE_NAME).bufferedReader().use { it.readText() })
+            merge(fresh, bundled)
         }.also { stations = it }
+    }
+
+    private fun parse(text: String): List<Station> {
+        val array = JSONArray(text)
+        return (0 until array.length()).mapNotNull { Station.fromCompactJson(array.getJSONObject(it)) }
     }
 
     private fun Station.matchesAnyTag(wanted: List<String>): Boolean {
@@ -71,8 +74,19 @@ class StationCatalog(context: Context) {
         return wanted.any { own.contains(it) }
     }
 
-    private companion object {
-        const val FILE_NAME = "stations.json"
+    companion object {
+        /**
+         * Свежий снимок из сети (Россия + топ-4000 мира, обновляется раз в день) плюс встроенный
+         * расширенный каталог (Россия + топ-15000 мира, обновляется с выпуском приложения).
+         * Свежие данные важнее: при совпадении станции по id или ссылке остаётся запись из [fresh].
+         */
+        fun merge(fresh: List<Station>, bundled: List<Station>): List<Station> =
+            (fresh + bundled)
+                .distinctBy { it.id.ifEmpty { it.url } }
+                .distinctBy { it.url }
+                .sortedByDescending { it.clicks }
+
+        private const val FILE_NAME = "stations.json"
         const val KEY_UPDATED = "updated"
         const val LIMIT = 200
         const val MIN_VALID_SIZE = 1000
